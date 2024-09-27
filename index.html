@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random IP Address Generator</title>
+    <style>
+        body {
+            position: relative;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #000000; /* Black background */
+            color: #32CD32; /* Lime green text */
+            overflow: hidden;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2em; /* Slightly smaller size */
+            margin-top: 20px;
+            animation: colorChange 2s infinite; /* Animation for color change */
+        }
+        @keyframes colorChange {
+            0%, 100% { color: #32CD32; } /* Lime green */
+            50% { color: #000000; } /* Black (invisible) */
+        }
+        .ip-address {
+            position: absolute;
+            font-size: 1.5em; /* Adjusted size */
+            font-weight: bold;
+            color: #32CD32;
+            cursor: pointer; /* Make it clear that the IPs are clickable */
+        }
+
+        /* Available commands button and list */
+        .command-list-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            padding: 10px;
+            background-color: transparent; /* Transparent background */
+            color: #32CD32; /* Lime green text */
+            font-size: 1em;
+            cursor: pointer;
+            border: 2px solid #32CD32; /* Green border for visibility */
+            height: 40px; /* Set a specific height */
+            z-index: 100; /* Keep on top */
+            border-radius: 0; /* Remove rounding */
+        }
+        .command-list-window {
+            position: fixed;
+            bottom: 70px;
+            left: 20px;
+            background-color: #000000;
+            color: #32CD32;
+            padding: 20px;
+            border: 1px solid #32CD32;
+            display: none;
+            z-index: 100; /* Keep on top */
+        }
+
+        /* Countdown */
+        .countdown {
+            position: fixed;
+            bottom: 20px;
+            left: 250px; /* Positioned away from the button */
+            font-size: 1em; /* Match size of command list button */
+            color: #32CD32;
+            height: 40px; /* Set the same height as the command button */
+            display: flex; /* Align text vertically */
+            align-items: center; /* Center vertically */
+            z-index: 100; /* Keep on top */
+        }
+
+        /* Countdown description */
+        .countdown-description {
+            position: fixed;
+            bottom: 20px;
+            left: 400px; /* Positioned next to the timer */
+            font-size: 1em; /* Match size of command list button */
+            color: #32CD32;
+            z-index: 100; /* Keep on top */
+        }
+    </style>
+</head>
+<body>
+    <!-- Centered Heading -->
+    <h1 id="header">RANDOM IP GENERATOR</h1>
+
+    <!-- Available Commands Button and Countdown -->
+    <button class="command-list-btn" id="commandListBtn">Show Available Commands</button>
+    <span class="countdown" id="countdown">10</span>
+
+    <!-- Available Commands Window -->
+    <div class="command-list-window" id="commandListWindow">
+        <strong>Available Commands:</strong>
+        <ul>
+            <li><strong>Ctrl + C</strong> - Stop generating IP addresses (IPs stay)</li>
+            <li><strong>Backspace</strong> - Clear IPs and restart generating (only after stopping with Ctrl + C)</li>
+            <li><strong>Click on an IP</strong> - Copy that specific IP address</li>
+            <li><strong>The countdown next to this botton</strong> - Time until the next IPs are generated</li>
+        </ul>
+    </div>
+
+    <script>
+        let ipInterval; // Variable to store the interval ID
+        const maxIPs = 5; // Number of IPs to generate at once
+        const body = document.body;
+        const ipAddresses = []; // Store IP elements to manage them
+        let isPaused = false; // Track if generation is paused
+        let ctrlCPressed = false; // Track if Ctrl + C has been pressed
+        let countdownTime = 10; // Countdown timer starting at 10 seconds
+        const countdownElement = document.getElementById('countdown'); // Countdown element
+
+        const headerElement = document.getElementById('header');
+        const headerHeight = headerElement.offsetHeight + 20; // Get the height of the header, including margin
+        const commandButtonHeight = 70; // Height including button and window space
+
+        // Function to update the countdown display
+        function updateCountdown() {
+            countdownElement.textContent = countdownTime;
+        }
+
+        // Function to reset and start the countdown
+        function resetCountdown() {
+            countdownTime = 10;
+            updateCountdown();
+            const countdownInterval = setInterval(() => {
+                if (!isPaused && countdownTime > 0) {
+                    countdownTime--;
+                    updateCountdown();
+                } else if (countdownTime === 0) {
+                    clearInterval(countdownInterval); // Stop countdown interval when it reaches 0
+                    generateBatchOfIPs(); // Generate new IPs when countdown reaches 0
+                    resetCountdown(); // Restart countdown
+                }
+            }, 1000); // Update countdown every second
+        }
+
+        // Function to generate a random IP address
+        function generateRandomIP() {
+            return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+        }
+
+        // Function to check if two elements are at least 50mm apart
+        function isAtLeast50mmApart(el1, el2) {
+            const rect1 = el1.getBoundingClientRect();
+            const rect2 = el2.getBoundingClientRect();
+            const mmToPx = 3.7795275591; // Conversion factor from mm to pixels (1mm ≈ 3.78px)
+            const minDistancePx = 50 * mmToPx; // 50mm converted to pixels
+
+            const distanceX = rect1.left - rect2.left;
+            const distanceY = rect1.top - rect2.top;
+            const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+
+            return distance >= minDistancePx;
+        }
+
+        // Function to copy an IP address to the clipboard
+        function copyIPToClipboard(ipText) {
+            const tempInput = document.createElement('input');
+            tempInput.value = ipText;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            alert(`Copied IP: ${ipText}`);
+        }
+
+        // Function to check if the generated IP is overlapping the reserved area
+        function isInReservedArea(el) {
+            const rect = el.getBoundingClientRect();
+            const reservedAreas = [
+                {
+                    left: 20,
+                    right: 20 + 200, // Button width (including padding)
+                    top: window.innerHeight - commandButtonHeight,
+                    bottom: window.innerHeight // Height of button and window
+                },
+                {
+                    left: 20,
+                    right: window.innerWidth - 20,
+                    top: 20 + headerHeight,
+                    bottom: 20 + headerHeight + 50 // Header height
+                }
+            ];
+            return reservedAreas.some(area =>
+                rect.left < area.right &&
+                rect.right > area.left &&
+                rect.top < area.bottom &&
+                rect.bottom > area.top
+            );
+        }
+
+        // Function to create an IP element at a random non-overlapping position
+        function createIPElement() {
+            const ipDiv = document.createElement('div');
+            const ipAddress = generateRandomIP();
+            ipDiv.textContent = ipAddress;
+            ipDiv.classList.add('ip-address');
+
+            let randomX, randomY, attempts = 0;
+            const ipWidth = 150; // Estimated width of the IP address element (in px)
+            const ipHeight = 50; // Estimated height of the IP address element (in px)
+
+            // Adjust the logic to prevent overlap, especially with the header and reserved areas
+            do {
+                randomX = Math.random() * (window.innerWidth - ipWidth); // Ensure IP stays within width
+                randomY = Math.random() * (window.innerHeight - ipHeight - commandButtonHeight - headerHeight); // Avoid reserved areas
+                ipDiv.style.left = `${randomX}px`;
+                ipDiv.style.top = `${randomY}px`;
+                attempts++;
+            } while (
+                attempts < 100 &&
+                (ipAddresses.some(el => !isAtLeast50mmApart(el, ipDiv)) || isInReservedArea(ipDiv))
+            ); // Ensure no overlap and minimum distance
+
+            // Add click event listener to copy the IP when clicked
+            ipDiv.addEventListener('click', () => {
+                copyIPToClipboard(ipAddress);
+            });
+
+            // Add the new IP element to the body
+            body.appendChild(ipDiv);
+            ipAddresses.push(ipDiv); // Store the reference of the IP element
+        }
+
+        // Function to generate a batch of IPs
+        function generateBatchOfIPs() {
+            // Clear previous IPs
+            if (ipAddresses.length > 0) {
+                ipAddresses.forEach(ipDiv => body.removeChild(ipDiv)); // Remove all existing IPs
+                ipAddresses.length = 0; // Clear the array
+            }
+            for (let i = 0; i < maxIPs; i++) {
+                createIPElement();
+            }
+        }
+
+        // Function to start generating IPs
+        function startGeneratingIPs() {
+            isPaused = false; // Start generating
+            resetCountdown(); // Start the countdown
+        }
+
+        // Keyboard event listeners
+        document.addEventListener('keydown', (event) => {
+            if (event.ctrlKey && event.key === 'c') {
+                isPaused = true; // Stop generating IPs
+                ctrlCPressed = true; // Track Ctrl + C pressed
+            }
+            if (event.key === 'Backspace' && ctrlCPressed) {
+                isPaused = false; // Resume generating IPs
+                generateBatchOfIPs(); // Generate new IPs immediately
+            }
+        });
+
+        // Command List Button Logic
+        const commandListBtn = document.getElementById('commandListBtn');
+        const commandListWindow = document.getElementById('commandListWindow');
+        commandListBtn.addEventListener('click', () => {
+            if (commandListWindow.style.display === 'none' || commandListWindow.style.display === '') {
+                commandListWindow.style.display = 'block';
+                commandListBtn.textContent = 'Hide Available Commands';
+            } else {
+                commandListWindow.style.display = 'none';
+                commandListBtn.textContent = 'Show Available Commands';
+            }
+        });
+
+        // Start generating IPs by default
+        startGeneratingIPs(); // Then continue generating every 10 seconds
+    </script>
+</body>
+</html>
+
